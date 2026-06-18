@@ -4,16 +4,17 @@ use std::rc::Rc;
 use gtk::SearchEntry;
 
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Button, FlowBox, Label, Orientation, ScrolledWindow};
+use gtk::{Application, ApplicationWindow, Button, Grid, Label, Orientation, ScrolledWindow};
 const APPS_PER_PAGE: usize = 24;
 
 pub fn build_ui(app: &Application) {
     load_css();
 
-    let apps = discover_apps();
+    let all_apps = Rc::new(discover_apps());
 
     let pages = Rc::new(
-        apps.chunks(APPS_PER_PAGE)
+        all_apps
+            .chunks(APPS_PER_PAGE)
             .map(|chunk| chunk.to_vec())
             .collect::<Vec<_>>()
     );
@@ -40,23 +41,68 @@ pub fn build_ui(app: &Application) {
     nav_row.append(&page_label);
 
 
-    let flow = Rc::new(
-        FlowBox::builder()
-            .max_children_per_line(8)
-            .selection_mode(gtk::SelectionMode::None)
-            .column_spacing(24)
-            .row_spacing(24)
-            .build()
-    );
+    let grid = Rc::new(Grid::new());
 
-    render_page(flow.as_ref(), &pages[0]);
+    grid.set_column_spacing(64);
+    grid.set_row_spacing(48);
+
+    grid.set_halign(gtk::Align::Center);
+    grid.set_valign(gtk::Align::Center);
+    
+    let flow_search = grid.clone();
+    let all_apps_search = all_apps.clone();
+
+    let pages_search = pages.clone();
+    let page_label_search = page_label.clone();
+    let current_page_search = current_page.clone();
+
+    search.connect_search_changed(move |entry| {
+        let query = entry
+            .text()
+            .to_string()
+            .to_lowercase();
+
+        if query.is_empty() {
+            let page = *current_page_search.borrow();
+            page_label_search.set_visible(true);
+            render_apps(
+                flow_search.as_ref(),
+                &pages_search[page],
+            );
+
+            update_page_indicator(
+                &page_label_search,
+                page,
+                pages_search.len(),
+            );
+
+            return;
+        }
+
+        let filtered: Vec<_> = all_apps_search
+            .iter()
+            .filter(|app| {
+                app.name
+                    .to_lowercase()
+                    .contains(&query)
+            })
+            .cloned()
+            .collect();
+
+        page_label_search.set_visible(false);
+
+        render_apps(
+            flow_search.as_ref(),
+            &filtered,
+        );
+    });
 
     let scroll_controller =
         gtk::EventControllerScroll::new(
             gtk::EventControllerScrollFlags::VERTICAL,
         );
 
-    let flow_scroll = flow.clone();
+    let flow_scroll = grid.clone();
     let pages_scroll = pages.clone();
     let page_label_scroll = page_label.clone();
     let current_page_scroll = current_page.clone();
@@ -76,7 +122,7 @@ pub fn build_ui(app: &Application) {
                 }
             }
 
-            render_page(
+            render_apps(
                 flow_scroll.as_ref(),
                 &pages_scroll[*page],
             );
@@ -91,8 +137,13 @@ pub fn build_ui(app: &Application) {
         },
     );
 
+    render_apps(
+        grid.as_ref(),
+        &pages[0],
+    );
+
     let scroll = ScrolledWindow::builder()
-        .child(flow.as_ref())
+        .child(grid.as_ref())
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -116,19 +167,23 @@ pub fn build_ui(app: &Application) {
     window.present();
 }
 
-fn render_page(flow: &gtk::FlowBox, page: &[crate::apps::DesktopApp]) {
-    while let Some(child) = flow.first_child() {
-        flow.remove(&child);
+fn render_apps(
+    grid: &gtk::Grid,
+    apps: &[crate::apps::DesktopApp],
+) {
+    while let Some(child) = grid.first_child() {
+        grid.remove(&child);
     }
 
-    for desktop_app in page {
+    for (i, desktop_app) in apps.iter().enumerate() {
         let exec = desktop_app.exec.clone();
 
-        let tile = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        tile.set_halign(gtk::Align::Center);
-        tile.set_valign(gtk::Align::Center);
+        let tile = gtk::Box::new(
+            gtk::Orientation::Vertical,
+            8,
+        );
 
-        tile.set_size_request(140, 120);
+        tile.set_size_request(160, 160);
 
         let icon_name = if desktop_app.icon.is_empty() {
             "application-x-executable"
@@ -139,43 +194,36 @@ fn render_page(flow: &gtk::FlowBox, page: &[crate::apps::DesktopApp]) {
         let icon = gtk::Image::from_icon_name(icon_name);
         icon.set_pixel_size(96);
 
-        let label = gtk::Label::new(Some(&desktop_app.name));
+        let label =
+            gtk::Label::new(Some(&desktop_app.name));
 
         label.set_wrap(true);
-        label.set_max_width_chars(10);
-        label.set_justify(gtk::Justification::Center);
+        label.set_max_width_chars(12);
+        label.set_justify(
+            gtk::Justification::Center,
+        );
 
         tile.append(&icon);
         tile.append(&label);
 
-        let motion = gtk::EventControllerMotion::new();
-
-        motion.connect_enter(|controller, _, _| {
-            if let Some(widget) = controller.widget() {
-                widget.set_cursor_from_name(Some("pointer"));
-            }
-        });
-
-        motion.connect_leave(|controller| {
-            if let Some(widget) = controller.widget() {
-                widget.set_cursor_from_name(None);
-            }
-        });
-
-        tile.add_controller(motion);
-
         let button = gtk::Button::new();
 
-        button.set_cursor_from_name(Some("grab"));
-
-        button.add_css_class("flat");
         button.set_child(Some(&tile));
 
         button.connect_clicked(move |_| {
             crate::utils::launch_app(&exec);
         });
 
-        flow.insert(&button, -1);
+        let row = (i / 8) as i32;
+        let col = (i % 8) as i32;
+
+        grid.attach(
+            &button,
+            col,
+            row,
+            1,
+            1,
+        );
     }
 }
 
