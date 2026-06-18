@@ -13,9 +13,11 @@ pub struct DesktopApp {
 pub fn discover_apps() -> Vec<DesktopApp> {
     let mut apps = Vec::new();
 
+    let home = std::env::var("HOME").unwrap_or_default();
+
     let dirs = [
-        "/usr/share/applications",
-        "/home/snehil/.local/share/applications",
+        "/usr/share/applications".to_string(),
+        format!("{}/.local/share/applications", home),
     ];
 
     for dir in dirs {
@@ -30,6 +32,15 @@ pub fn discover_apps() -> Vec<DesktopApp> {
                 Ok(c) => c,
                 Err(_) => continue,
             };
+
+            // Respect desktop entry metadata
+            if content.contains("NoDisplay=true") {
+                continue;
+            }
+
+            if content.contains("Hidden=true") {
+                continue;
+            }
 
             let mut name = String::new();
             let mut exec = String::new();
@@ -49,20 +60,95 @@ pub fn discover_apps() -> Vec<DesktopApp> {
                 }
             }
 
-            if !name.is_empty() {
-                apps.push(DesktopApp {
-                    name,
-                    exec,
-                    icon,
-                    desktop_file: path.to_path_buf(),
-                });
+            // Must be launchable
+            if exec.is_empty() || name.is_empty() {
+                continue;
             }
+
+            let lower = name.to_lowercase();
+
+            // Hide Linux plumbing and helper entries
+            let blacklist = [
+                "oauth",
+                "agent",
+                "daemon",
+                "applet",
+                "launcher button",
+                "app tray",
+                "ibus",
+                "kded",
+                "knewstuff",
+                "ktelnetservice",
+                "handler for snap",
+                "portal",
+                "access prompt",
+                "geoclue",
+                "wayland",
+            ];
+
+            if blacklist.iter().any(|item| lower.contains(item)) {
+                continue;
+            }
+
+            // Hide settings pages
+            let settings_pages = [
+                "accessibility",
+                "appearance",
+                "applications",
+                "apps",
+                "bluetooth",
+                "color",
+                "date & time",
+                "date, time & calendar",
+                "default applications",
+                "desktop",
+                "displays",
+                "displays settings",
+                "dock",
+                "fonts",
+                "input devices",
+                "input method",
+                "input sources",
+                "keyboard",
+                "keyboard layout",
+                "language support",
+                "mobile network",
+                "mouse",
+                "mouse & touchpad",
+                "multitasking",
+                "network",
+                "network & wireless",
+                "notifications",
+                "online accounts",
+                "panel",
+                "power",
+                "power & battery",
+                "preferences",
+                "privacy & security",
+                "printers",
+                "sound",
+                "users",
+            ];
+
+            if settings_pages.contains(&lower.as_str()) {
+                continue;
+            }
+
+            apps.push(DesktopApp {
+                name,
+                exec,
+                icon,
+                desktop_file: path.to_path_buf(),
+            });
         }
     }
 
     apps.sort_by(|a, b| a.name.cmp(&b.name));
-    let mut seen = HashSet::new();
 
+    let mut seen = HashSet::new();
     apps.retain(|app| seen.insert(app.name.clone()));
+
+    println!("Filtered to {} apps", apps.len());
+
     apps
 }

@@ -1,0 +1,64 @@
+Filtered to 63 apps
+Advanced Network Configuration
+Apple Music
+COSMIC Files
+COSMIC Media Player
+COSMIC Screenshot
+COSMIC Settings
+COSMIC Store
+COSMIC Terminal
+COSMIC Text Editor
+Character Map
+Cloudflare One Client
+DataGrip 2026.1
+Disk Usage Analyzer
+Disks
+Document Scanner
+Dolphin
+File Roller
+Firmware Manager
+GNOME System Monitor
+GoLand 2026.1
+Helix
+Help
+Icon Browser
+Image Viewer
+ImageMagick (color depth=q16)
+JetBrains Toolbox
+Kvantum Manager
+Math
+Mousepad Preferences
+NVIDIA X Server Settings
+New Document
+New Drawing
+New Empty Window
+New Formula
+New Incognito Window
+New Presentation
+New Spreadsheet
+New Window
+Open the Address Book
+Passwords and Keys
+Plank
+Popsicle USB Flasher
+Power Statistics
+PulseAudio Volume Control
+PyCharm 2026.1
+Qalculate!
+Qt5 Settings
+Qt6 Settings
+Repoman
+RustRover 2026.1.3
+Settings
+Startup Applications
+System Monitor
+System76 Driver
+TeXInfo
+Text Editor Settings
+Vim
+WebStorm 2026.1
+WezTerm
+btop++
+kitty
+mpv Media Player
+nvtop
