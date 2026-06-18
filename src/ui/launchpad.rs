@@ -4,13 +4,16 @@ use std::rc::Rc;
 use gtk::SearchEntry;
 
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Button, Grid, Label, Orientation, ScrolledWindow};
+use gtk::{Application, ApplicationWindow, Button, Grid, Label, Orientation};
 const APPS_PER_PAGE: usize = 24;
 
 pub fn build_ui(app: &Application) {
+    println!("Mars started");
     load_css();
 
     let all_apps = Rc::new(discover_apps());
+    let current_results =
+        Rc::new(RefCell::new(Vec::<crate::apps::DesktopApp>::new()));
 
     let pages = Rc::new(
         all_apps
@@ -18,6 +21,11 @@ pub fn build_ui(app: &Application) {
             .map(|chunk| chunk.to_vec())
             .collect::<Vec<_>>()
     );
+
+    if let Some(first_page) = pages.first() {
+        *current_results.borrow_mut() =
+            first_page.clone();
+    }
 
     println!("Pages: {}", pages.len());
     let current_page = Rc::new(RefCell::new(0usize));
@@ -35,6 +43,7 @@ pub fn build_ui(app: &Application) {
     let nav_row = gtk::Box::new(Orientation::Horizontal, 24);
 
     let root = gtk::Box::new(Orientation::Vertical, 16);
+    root.set_margin_top(32);
 
     nav_row.set_halign(gtk::Align::Center);
 
@@ -49,12 +58,15 @@ pub fn build_ui(app: &Application) {
     grid.set_halign(gtk::Align::Center);
     grid.set_valign(gtk::Align::Center);
     
-    let flow_search = grid.clone();
+    let grid_search = grid.clone();
     let all_apps_search = all_apps.clone();
 
     let pages_search = pages.clone();
     let page_label_search = page_label.clone();
     let current_page_search = current_page.clone();
+
+    let current_results_search =
+        current_results.clone();
 
     search.connect_search_changed(move |entry| {
         let query = entry
@@ -64,9 +76,14 @@ pub fn build_ui(app: &Application) {
 
         if query.is_empty() {
             let page = *current_page_search.borrow();
+
             page_label_search.set_visible(true);
+
+            *current_results_search.borrow_mut() =
+                pages_search[page].clone();
+
             render_apps(
-                flow_search.as_ref(),
+                grid_search.as_ref(),
                 &pages_search[page],
             );
 
@@ -91,8 +108,11 @@ pub fn build_ui(app: &Application) {
 
         page_label_search.set_visible(false);
 
+        *current_results_search.borrow_mut() =
+            filtered.clone();
+
         render_apps(
-            flow_search.as_ref(),
+            grid_search.as_ref(),
             &filtered,
         );
     });
@@ -102,13 +122,17 @@ pub fn build_ui(app: &Application) {
             gtk::EventControllerScrollFlags::VERTICAL,
         );
 
-    let flow_scroll = grid.clone();
+    let grid_scroll = grid.clone();
     let pages_scroll = pages.clone();
     let page_label_scroll = page_label.clone();
     let current_page_scroll = current_page.clone();
 
     scroll_controller.connect_scroll(
         move |_, _, dy| {
+
+            if !page_label_scroll.is_visible() {
+                return gtk::glib::Propagation::Stop;
+            }
             let mut page =
                 current_page_scroll.borrow_mut();
 
@@ -123,7 +147,7 @@ pub fn build_ui(app: &Application) {
             }
 
             render_apps(
-                flow_scroll.as_ref(),
+                grid_scroll.as_ref(),
                 &pages_scroll[*page],
             );
 
@@ -142,14 +166,11 @@ pub fn build_ui(app: &Application) {
         &pages[0],
     );
 
-    let scroll = ScrolledWindow::builder()
-        .child(grid.as_ref())
-        .vexpand(true)
-        .hexpand(true)
-        .build();
+    grid.set_hexpand(true);
+    grid.set_vexpand(true);
 
     root.append(&search);
-    root.append(&scroll);
+    root.append(grid.as_ref());
     root.append(&nav_row);
 
 
@@ -161,10 +182,51 @@ pub fn build_ui(app: &Application) {
         .child(&root)
         .build();
 
+    let app_for_enter = app.clone();
+
+    let key_controller = gtk::EventControllerKey::new();
+
+    let results_for_enter =
+        current_results.clone();
+
+    search.connect_activate(move |_| {
+        let results =
+            results_for_enter.borrow();
+
+        if let Some(app_entry) = results.first() {
+            crate::utils::launch_app(
+                &app_entry.exec,
+            );
+
+            println!("Mars exiting");
+            app_for_enter.quit();
+        }
+    });
+
+    let app_for_escape = app.clone();
+
+    key_controller.connect_key_pressed(
+        move |_, key, _, _| {
+
+            if key == gtk::gdk::Key::Escape {
+                app_for_escape.quit();
+
+                return gtk::glib::Propagation::Stop;
+            }
+
+            gtk::glib::Propagation::Proceed
+        },
+    );
+
+    search.add_controller(key_controller);
+
     window.set_opacity(0.85);
     window.add_controller(scroll_controller);
     window.fullscreen();
     window.present();
+
+    search.grab_focus();
+    search.select_region(0, -1);
 }
 
 fn render_apps(
@@ -210,6 +272,8 @@ fn render_apps(
 
         button.set_child(Some(&tile));
 
+        let exec = desktop_app.exec.clone();
+
         button.connect_clicked(move |_| {
             crate::utils::launch_app(&exec);
         });
@@ -234,7 +298,7 @@ fn update_page_indicator(label: &gtk::Label, current: usize, total: usize) {
         if i == current {
             dots.push('●');
         } else {
-            dots.push('○');
+            dots.push('·');
         }
 
         dots.push(' ');
@@ -275,13 +339,21 @@ fn load_css() {
         }
 
         searchentry {
-            border-radius: 20px;
-            padding: 8px;
-            background: rgba(255,255,255,0.12);
+            min-height: 48px;
+            min-width: 700px;
+
+            border-radius: 999px;
+
+            padding: 12px 24px;
+
+            background: rgba(255,255,255,0.10);
+
+            border: 1px solid rgba(255,255,255,0.15);
         }
 
         searchentry text {
             color: white;
+            font-size: 18px;
         }
         "
     );
