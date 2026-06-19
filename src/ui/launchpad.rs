@@ -8,7 +8,6 @@ use gtk::{Application, ApplicationWindow, Button, Grid, Label, Orientation};
 const APPS_PER_PAGE: usize = 24;
 
 pub fn build_ui(app: &Application) {
-    println!("Mars started");
     load_css();
 
     let all_apps = Rc::new(discover_apps());
@@ -27,36 +26,40 @@ pub fn build_ui(app: &Application) {
             first_page.clone();
     }
 
-    println!("Pages: {}", pages.len());
     let current_page = Rc::new(RefCell::new(0usize));
     let search = SearchEntry::new();
 
     search.set_placeholder_text(Some("Search Applications"));
-    search.set_width_chars(40);
     search.set_halign(gtk::Align::Center);
 
     let page_label = Label::new(None);
+    page_label.add_css_class("page-dots");
 
     update_page_indicator(&page_label, 0, pages.len());
 
 
     let nav_row = gtk::Box::new(Orientation::Horizontal, 24);
 
-    let root = gtk::Box::new(Orientation::Vertical, 16);
-    root.set_margin_top(32);
+    let root = gtk::Box::new(Orientation::Vertical, 8);
+    root.set_valign(gtk::Align::Center);
+    root.set_vexpand(true);
+    root.set_spacing(28);
 
     nav_row.set_halign(gtk::Align::Center);
 
     nav_row.append(&page_label);
+    nav_row.set_margin_top(16);
+    nav_row.set_margin_bottom(24);
 
 
     let grid = Rc::new(Grid::new());
 
-    grid.set_column_spacing(64);
-    grid.set_row_spacing(48);
-
+    grid.set_column_spacing(16);
+    grid.set_row_spacing(12);
     grid.set_halign(gtk::Align::Center);
-    grid.set_valign(gtk::Align::Center);
+    grid.set_hexpand(true);
+    root.set_halign(gtk::Align::Fill);
+    root.set_hexpand(true);
     
     let grid_search = grid.clone();
     let all_apps_search = all_apps.clone();
@@ -169,7 +172,10 @@ pub fn build_ui(app: &Application) {
     grid.set_hexpand(true);
     grid.set_vexpand(true);
 
+    let spacer = gtk::Box::new(Orientation::Vertical, 0);
+    spacer.set_size_request(-1, 40);
     root.append(&search);
+    root.append(&spacer);   // add this
     root.append(grid.as_ref());
     root.append(&nav_row);
 
@@ -198,7 +204,6 @@ pub fn build_ui(app: &Application) {
                 &app_entry.exec,
             );
 
-            println!("Mars exiting");
             app_for_enter.quit();
         }
     });
@@ -242,10 +247,10 @@ fn render_apps(
 
         let tile = gtk::Box::new(
             gtk::Orientation::Vertical,
-            8,
+            4,
         );
 
-        tile.set_size_request(160, 160);
+        tile.set_size_request(100, 100);
 
         let icon_name = if desktop_app.icon.is_empty() {
             "application-x-executable"
@@ -253,14 +258,15 @@ fn render_apps(
             &desktop_app.icon
         };
 
-        let icon = gtk::Image::from_icon_name(icon_name);
-        icon.set_pixel_size(96);
+        let icon = create_icon(icon_name);
 
         let label =
             gtk::Label::new(Some(&desktop_app.name));
 
         label.set_wrap(true);
-        label.set_max_width_chars(12);
+        label.set_max_width_chars(10);   // was 12
+        label.set_ellipsize(gtk::pango::EllipsizeMode::End);  // add this
+        label.set_wrap(false);           // turn off wrap, use ellipsis instead
         label.set_justify(
             gtk::Justification::Center,
         );
@@ -271,8 +277,6 @@ fn render_apps(
         let button = gtk::Button::new();
 
         button.set_child(Some(&tile));
-
-        let exec = desktop_app.exec.clone();
 
         button.connect_clicked(move |_| {
             crate::utils::launch_app(&exec);
@@ -293,18 +297,31 @@ fn render_apps(
 
 fn update_page_indicator(label: &gtk::Label, current: usize, total: usize) {
     let mut dots = String::new();
-
     for i in 0..total {
         if i == current {
-            dots.push('●');
+            dots.push('⬤');   // filled — was ●
         } else {
-            dots.push('·');
+            dots.push('○');   // open circle — was ·
         }
-
         dots.push(' ');
     }
-
     label.set_text(dots.trim());
+}
+
+fn create_icon(icon_name: &str) -> gtk::Image {
+    use std::path::Path;
+
+    if Path::new(icon_name).exists() {
+        let image = gtk::Image::from_file(icon_name);
+        image.set_pixel_size(72);
+        return image;
+    }
+
+    let image = gtk::Image::from_icon_name(icon_name);
+
+    image.set_pixel_size(72);
+
+    image
 }
 
 fn load_css() {
@@ -317,44 +334,69 @@ fn load_css() {
         }
 
         button {
-            background: transparent;
-            border: none;
-            box-shadow: none;
-        }
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 20px;
+    transition: background 0.15s ease;
+}
 
-        button:hover {
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        }
+button:hover {
+    background: rgba(255, 255, 255, 0.12);  /* soft white glow */
+    border: none;
+    box-shadow: none;
+}
 
-        button:active {
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        }
+button:active {
+    background: rgba(255, 255, 255, 0.22);
+    border: none;
+    box-shadow: none;
+}
 
         button.flat {
         background: transparent;
         }
 
         searchentry {
-            min-height: 48px;
-            min-width: 700px;
+    min-width: 280px;
+    min-height: 34px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    padding: 0 14px;
+    box-shadow: none;
+    outline: none;
+}
 
-            border-radius: 999px;
+searchentry:focus {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.22);
+    box-shadow: none;
+    outline: none;
+}
 
-            padding: 12px 24px;
+/* Kill GTK's default focus indicator */
+searchentry > text {
+    box-shadow: none;
+}
 
-            background: rgba(255,255,255,0.10);
 
-            border: 1px solid rgba(255,255,255,0.15);
+        .page-dots {
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 8px;
+            letter-spacing: 4px;
         }
 
-        searchentry text {
-            color: white;
-            font-size: 18px;
-        }
+box {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+label {
+    color: white;
+    font-size: 11px;
+    font-weight: 500;
+}
         "
     );
 
